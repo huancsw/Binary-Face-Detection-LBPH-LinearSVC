@@ -68,7 +68,7 @@ def main() -> None:
     parser.add_argument("--model", type=Path, default=Path("models/lbph_svm_face_detector.joblib"))
     parser.add_argument("--image", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("detections.jpg"))
-    parser.add_argument("--probability-threshold", type=float, default=0.60)
+    parser.add_argument("--probability-threshold", type=float, default=0.41)
     parser.add_argument("--stride", type=int, default=12)
     parser.add_argument(
         "--proposal",
