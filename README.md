@@ -54,7 +54,7 @@ a calibrated probability threshold of 60%; lower it only when a face is missed:
 ```powershell
 python detect_faces.py --model models/lbph_svm_face_detector.joblib --image "D:\path\to\photo.jpg" --probability-threshold 0.50
 ```
-
+Giảm --score-threshold để nhận nhiều box hơn, nhưng dễ false positive.
 Use `--proposal sliding` only to inspect the pure sliding-window baseline; it
 is slower and typically produces more false positives.
 
