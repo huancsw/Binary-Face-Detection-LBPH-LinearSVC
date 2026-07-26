@@ -19,6 +19,13 @@ cascades during training, or delete dataset files.
 python -m pip install -r requirements.txt
 ```
 
+The detector uses Haar cascade proposals, so it requires OpenCV 4.x. If an
+existing environment has OpenCV 5 installed, force the compatible version:
+
+```powershell
+python -m pip install --upgrade --force-reinstall "opencv-python>=4.10,<5"
+```
+
 ## Train
 
 Train from all 13,386 train and 3,347 validation images:
@@ -46,19 +53,42 @@ every patch.
 python detect_faces.py --model models/lbph_svm_face_detector.joblib --image "D:\path\to\photo.jpg" --output detections.jpg
 ```
 
-The default detector uses Haar cascade only to propose face-sized regions; the
+The default detector uses frontal Haar cascade only to propose face-sized regions; the
 LBPH + SVM model makes the final binary accept/reject decision. This avoids
 sliding-window detections of eyes, noses, or beards as separate faces. It uses
-a calibrated probability threshold of 60%; lower it only when a face is missed:
+a calibrated probability threshold of 41%; lower it only when a face is missed:
 
 ```powershell
 python detect_faces.py --model models/lbph_svm_face_detector.joblib --image "D:\path\to\photo.jpg" --probability-threshold 0.50
 ```
-Giảm --score-threshold để nhận nhiều box hơn, nhưng dễ false positive.
+
 Use `--proposal sliding` only to inspect the pure sliding-window baseline; it
 is slower and typically produces more false positives.
+
+The default ignores Haar proposals smaller than 40 pixels. Increase
+`--min-face-size` when small objects such as buttons or jewellery become face
+boxes.
 
 The detector scans a multi-scale image pyramid and applies non-maximum
 suppression. LBPH + SVM is a classical baseline; it will be materially less
 robust than a modern YOLO detector, particularly for small, angled, or occluded
 faces.
+
+## Web interface
+
+Run the complete browser-based application with:
+
+```powershell
+py -3 app.py
+```
+
+Open `http://127.0.0.1:5000` in a browser. The HCM-UTE branded interface has
+two workspaces:
+
+- **Phát hiện khuôn mặt**: upload an image, set the probability threshold and
+	minimum face size, then view all nine processing stages from Haar proposals
+	through the final NMS result.
+- **Huấn luyện mô hình**: enter the YOLO dataset and output-model paths, set
+	the sampling limits, and follow the live training log.
+
+The interface identifies the authors as Lê Huy Huân and Trịnh Nguyễn Anh Hào.

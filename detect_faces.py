@@ -12,6 +12,20 @@ import numpy as np
 from train_face_detector import PATCH_SIZE, lbph_feature
 
 
+def load_haar_cascade(filename: str) -> cv2.CascadeClassifier:
+    """Load an OpenCV 4.x Haar cascade with a clear error on OpenCV 5.x."""
+    cascade_factory = getattr(cv2, "CascadeClassifier", None)
+    if cascade_factory is None:
+        raise RuntimeError(
+            "Haar Cascade requires OpenCV 4.x. Reinstall dependencies with: "
+            "python -m pip install --upgrade --force-reinstall 'opencv-python>=4.10,<5'"
+        )
+    cascade = cascade_factory(cv2.data.haarcascades + filename)
+    if cascade.empty():
+        raise RuntimeError(f"Cannot load Haar cascade: {filename}")
+    return cascade
+
+
 def nms(boxes: list[tuple[int, int, int, int, float]], threshold: float) -> list[tuple[int, int, int, int, float]]:
     boxes = sorted(boxes, key=lambda item: item[4], reverse=True)
     kept = []
@@ -43,25 +57,43 @@ def detect(image: np.ndarray, classifier, probability_threshold: float, stride: 
     return nms(detections, 0.35)
 
 
-def detect_haar_proposals(
-    image: np.ndarray, classifier, cascade: cv2.CascadeClassifier, probability_threshold: float
-) -> list[tuple[int, int, int, int, float]]:
-    """Use Haar only for proposals; LBPH + SVM makes the final decision.
-
-    A patch classifier evaluated with a sliding window often labels individual
-    eyes, noses, and beards as faces.  Haar proposals provide face-sized
-    regions, and the trained SVM still accepts or rejects each region.
-    """
+def collect_haar_proposals(
+    image: np.ndarray, cascade: cv2.CascadeClassifier, min_face_size: int
+) -> list[tuple[int, int, int, int]]:
+    """Return frontal Haar candidate boxes."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    detections = []
-    for x, y, width, height in cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40)
-    ):
-        probability = classifier.predict_proba([lbph_feature(image[y:y + height, x:x + width])])[0, 1]
-        if probability >= probability_threshold:
-            detections.append((int(x), int(y), int(x + width), int(y + height), float(probability)))
-    return nms(detections, 0.30)
+    image_height, image_width = gray.shape
+    proposals = cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(min_face_size, min_face_size)
+    )
 
+    boxes = []
+    for x, y, width, height in proposals:
+        x1, y1 = max(0, int(x)), max(0, int(y))
+        x2, y2 = min(image_width, int(x + width)), min(image_height, int(y + height))
+        if x2 > x1 and y2 > y1:
+            boxes.append((x1, y1, x2, y2))
+    return boxes
+
+
+def classify_haar_proposals(
+    image: np.ndarray, classifier, proposals: list[tuple[int, int, int, int]], probability_threshold: float
+) -> list[tuple[int, int, int, int, float]]:
+    """Classify Haar proposals with the LBPH + SVM model, before NMS."""
+    detections = []
+    for x1, y1, x2, y2 in proposals:
+        probability = classifier.predict_proba([lbph_feature(image[y1:y2, x1:x2])])[0, 1]
+        if probability >= probability_threshold:
+            detections.append((x1, y1, x2, y2, float(probability)))
+    return detections
+
+
+def detect_haar_proposals(
+    image: np.ndarray, classifier, cascade: cv2.CascadeClassifier, probability_threshold: float, min_face_size: int
+) -> list[tuple[int, int, int, int, float]]:
+    """Use Haar only for proposals; LBPH + SVM makes the final decision."""
+    proposals = collect_haar_proposals(image, cascade, min_face_size)
+    return nms(classify_haar_proposals(image, classifier, proposals, probability_threshold), 0.30)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Detect faces using the trained LBPH-style SVM model.")
@@ -69,6 +101,12 @@ def main() -> None:
     parser.add_argument("--image", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("detections.jpg"))
     parser.add_argument("--probability-threshold", type=float, default=0.41)
+    parser.add_argument(
+        "--min-face-size",
+        type=int,
+        default=40,
+        help="Minimum face proposal size in pixels; lower this only to detect very small faces.",
+    )
     parser.add_argument("--stride", type=int, default=12)
     parser.add_argument(
         "--proposal",
@@ -85,10 +123,10 @@ def main() -> None:
     if image is None:
         raise SystemExit(f"Cannot read image: {args.image}")
     if args.proposal == "haar":
-        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        if cascade.empty():
-            raise SystemExit("OpenCV Haar cascade is unavailable. Reinstall opencv-python.")
-        detections = detect_haar_proposals(image, model["classifier"], cascade, args.probability_threshold)
+        cascade = load_haar_cascade("haarcascade_frontalface_default.xml")
+        detections = detect_haar_proposals(
+            image, model["classifier"], cascade, args.probability_threshold, args.min_face_size
+        )
     else:
         detections = detect(image, model["classifier"], args.probability_threshold, args.stride)
     for x1, y1, x2, y2, score in detections:

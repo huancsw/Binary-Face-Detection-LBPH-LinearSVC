@@ -67,8 +67,8 @@ def prepare_patch(image: np.ndarray) -> np.ndarray:
     return cv2.equalizeHist(gray)
 
 
-def lbph_feature(image: np.ndarray) -> np.ndarray:
-    """Return an LBP histogram per spatial cell (the feature used by LBPH)."""
+def lbp_code_image(image: np.ndarray) -> np.ndarray:
+    """Create the 8-neighbour Local Binary Pattern code image for a patch."""
     gray = prepare_patch(image)
     center = gray[1:-1, 1:-1]
     code = np.zeros_like(center, dtype=np.uint8)
@@ -78,6 +78,12 @@ def lbph_feature(image: np.ndarray) -> np.ndarray:
     )
     for bit, neighbor in enumerate(neighbors):
         code |= ((neighbor >= center).astype(np.uint8) << bit)
+    return code
+
+
+def lbph_feature(image: np.ndarray) -> np.ndarray:
+    """Return an LBP histogram per spatial cell (the feature used by LBPH)."""
+    code = lbp_code_image(image)
 
     rows = np.array_split(code, GRID_SIZE, axis=0)
     histograms = []
