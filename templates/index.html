@@ -1,1 +1,155 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phát hiện khuôn mặt | LBPH + SVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Trang chủ">
+        <img src="/images.png" alt="Logo HCM-UTE">
+        <span class="brand-rule"></span>
+        <span>
+          <strong>HCM-UTE</strong>
+          <small>Faculty of Information Technology</small>
+        </span>
+      </a>
+      <div class="project-title">
+        <span class="eyebrow">Computer Vision Lab</span>
+        <h1>Phát hiện khuôn mặt với LBPH + SVM</h1>
+      </div>
+      <div class="connection" id="connection-status"><span></span> Đang kiểm tra hệ thống</div>
+    </header>
 
+    <main>
+      <nav class="tabbar" aria-label="Chức năng">
+        <button class="tab active" data-tab="detect" type="button"><i data-lucide="scan-face"></i> Phát hiện khuôn mặt</button>
+        <button class="tab" data-tab="train" type="button"><i data-lucide="graduation-cap"></i> Huấn luyện mô hình</button>
+      </nav>
+
+      <section id="detect" class="tab-panel active">
+        <div class="workspace-heading">
+          <div>
+            <p class="section-kicker">Inference workspace</p>
+            <h2>Phân tích ảnh đầu vào</h2>
+          </div>
+          <p>Haar Cascade tạo vùng ứng viên, sau đó đặc trưng LBPH và SVM quyết định vùng có phải khuôn mặt hay không.</p>
+        </div>
+
+        <form id="detect-form" class="detect-layout">
+          <section class="control-panel" aria-labelledby="input-title">
+            <div class="panel-title">
+              <div class="step-number">01</div>
+              <div><p class="section-kicker">Nguồn dữ liệu</p><h3 id="input-title">Ảnh và mô hình</h3></div>
+            </div>
+            <label class="upload-zone" for="image-input" id="upload-zone">
+              <span class="upload-icon"><i data-lucide="image-up"></i></span>
+              <strong>Chọn ảnh để phân tích</strong>
+              <small>JPG, PNG hoặc BMP, tối đa 20 MB</small>
+              <span class="file-name" id="file-name">Chưa chọn ảnh</span>
+              <input id="image-input" name="image" type="file" accept="image/jpeg,image/png,image/bmp" required>
+            </label>
+            <label class="field-label" for="model-path">Đường dẫn model</label>
+            <div class="input-with-icon">
+              <i data-lucide="brain-circuit"></i>
+              <input id="model-path" name="model_path" value="{{ default_model }}" spellcheck="false">
+            </div>
+            <p class="field-help">Để trống để dùng model mặc định trong thư mục <code>models</code>.</p>
+          </section>
+
+          <section class="control-panel" aria-labelledby="settings-title">
+            <div class="panel-title">
+              <div class="step-number">02</div>
+              <div><p class="section-kicker">Cấu hình</p><h3 id="settings-title">Tham số nhận diện</h3></div>
+            </div>
+            <div class="parameter-grid">
+              <label class="range-field" for="threshold">
+                <span>Ngưỡng xác suất <output id="threshold-value">41%</output></span>
+                <input id="threshold" name="threshold" type="range" min="0" max="1" step="0.01" value="0.41">
+                <small>Giảm khi ảnh có khuôn mặt bị bỏ sót.</small>
+              </label>
+              <label class="number-field" for="min-size">
+                <span>Kích thước mặt tối thiểu</span>
+                <div><input id="min-size" name="min_size" type="number" min="1" value="40"><b>px</b></div>
+                <small>Tăng để loại vùng quá nhỏ.</small>
+              </label>
+            </div>
+            <button class="primary-action" id="detect-button" type="submit"><i data-lucide="scan-search"></i><span>Phát hiện khuôn mặt</span></button>
+            <p class="form-status" id="detect-status" aria-live="polite">Sẵn sàng nhận ảnh.</p>
+          </section>
+
+          <section class="preview-panel" aria-labelledby="preview-title">
+            <div class="panel-title compact">
+              <div><p class="section-kicker">Ảnh đầu vào</p><h3 id="preview-title">Xem trước</h3></div>
+              <span class="image-badge" id="preview-badge">Chờ ảnh</span>
+            </div>
+            <div class="preview-canvas" id="preview-canvas">
+              <i data-lucide="image"></i>
+              <img id="input-preview" alt="Ảnh đầu vào đã chọn">
+              <span>Ảnh của bạn sẽ xuất hiện tại đây</span>
+            </div>
+          </section>
+        </form>
+
+        <section class="results-section" aria-labelledby="process-title">
+          <div class="results-heading">
+            <div>
+              <p class="section-kicker">Processing trace</p>
+              <h2 id="process-title">Dấu vết xử lý</h2>
+            </div>
+            <div class="result-summary" id="result-summary">Chưa có kết quả</div>
+          </div>
+          <div class="stage-grid">
+            <article class="stage-card" data-stage="original"><header><span>01</span><h3>Ảnh gốc</h3></header><div class="stage-image"><img alt="Ảnh gốc"><i data-lucide="image"></i></div></article>
+            <article class="stage-card" data-stage="gray"><header><span>02</span><h3>Grayscale</h3></header><div class="stage-image"><img alt="Ảnh grayscale"><i data-lucide="contrast"></i></div></article>
+            <article class="stage-card" data-stage="proposals"><header><span>03</span><h3>Haar proposals</h3></header><div class="stage-image"><img alt="Các vùng Haar đề xuất"><i data-lucide="focus"></i></div></article>
+            <article class="stage-card" data-stage="patch"><header><span>04</span><h3>Patch khuôn mặt</h3></header><div class="stage-image"><img alt="Patch khuôn mặt"><i data-lucide="crop"></i></div></article>
+            <article class="stage-card" data-stage="normalized"><header><span>05</span><h3>Chuẩn hóa 64 x 64</h3></header><div class="stage-image"><img alt="Patch chuẩn hóa"><i data-lucide="maximize"></i></div></article>
+            <article class="stage-card" data-stage="lbp"><header><span>06</span><h3>LBP code image</h3></header><div class="stage-image"><img alt="LBP code image"><i data-lucide="grid-3x3"></i></div></article>
+            <article class="stage-card" data-stage="histogram"><header><span>07</span><h3>Histogram LBPH</h3></header><div class="stage-image"><img alt="Histogram LBPH"><i data-lucide="chart-no-axes-column"></i></div></article>
+            <article class="stage-card" data-stage="svm"><header><span>08</span><h3>SVM chấp nhận</h3></header><div class="stage-image"><img alt="Các vùng được SVM chấp nhận"><i data-lucide="badge-check"></i></div></article>
+            <article class="stage-card final-card" data-stage="final"><header><span>09</span><h3>NMS kết quả cuối</h3></header><div class="stage-image"><img alt="Kết quả phát hiện cuối cùng"><i data-lucide="scan-face"></i></div></article>
+          </div>
+        </section>
+      </section>
+
+      <section id="train" class="tab-panel">
+        <div class="workspace-heading">
+          <div><p class="section-kicker">Model workspace</p><h2>Huấn luyện LBPH + SVM</h2></div>
+          <p>Labels YOLO được chuyển thành face/background patches, trích xuất đặc trưng LBPH và huấn luyện linear SVM đã calibration.</p>
+        </div>
+        <div class="train-layout">
+          <form id="train-form" class="control-panel train-form">
+            <div class="panel-title"><div class="step-number">01</div><div><p class="section-kicker">Thiết lập</p><h3>Thông số huấn luyện</h3></div></div>
+            <label class="field-label" for="dataset">Dataset YOLO</label>
+            <div class="input-with-icon"><i data-lucide="folder-open"></i><input id="dataset" value="{{ default_dataset }}" required></div>
+            <label class="field-label" for="output-model">Model xuất ra</label>
+            <div class="input-with-icon"><i data-lucide="save"></i><input id="output-model" value="{{ default_model }}" required></div>
+            <div class="train-parameters">
+              <label>Ảnh train tối đa<input id="max-train" type="number" min="0" value="0"></label>
+              <label>Ảnh validation tối đa<input id="max-val" type="number" min="0" value="0"></label>
+              <label>Negative / ảnh<input id="negatives" type="number" min="0" value="6"></label>
+              <label>Mẫu tối đa / lớp<input id="samples" type="number" min="0" value="12000"></label>
+            </div>
+            <button class="primary-action" id="train-button" type="submit"><i data-lucide="play"></i><span>Bắt đầu train</span></button>
+            <p class="form-status" id="train-status" aria-live="polite">Chưa có tiến trình train.</p>
+          </form>
+          <section class="log-panel" aria-label="Log huấn luyện">
+            <div class="panel-title compact"><div><p class="section-kicker">Live output</p><h3>Log huấn luyện</h3></div><span class="log-led" id="log-led"></span></div>
+            <pre id="training-log">Chờ khởi tạo phiên train...</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+    <footer><span>Đề tài môn học Computer Vision</span><span>Tác giả: Lê Huy Huân và Trịnh Nguyễn Anh Hào</span></footer>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
